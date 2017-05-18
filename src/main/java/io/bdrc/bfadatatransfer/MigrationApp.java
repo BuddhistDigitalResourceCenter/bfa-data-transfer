@@ -11,6 +11,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import org.apache.jena.query.Query;
+import org.apache.jena.query.QueryExecution;
+import org.apache.jena.query.QueryExecutionFactory;
+import org.apache.jena.query.QueryFactory;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 import org.apache.jena.rdf.model.Literal;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
@@ -60,7 +66,7 @@ public class MigrationApp
     public static final String DATA_DIR = "../xmltoldmigration/tbrc-jsonld/";
     public static final String OUTPUT_DIR = "tbrc-bfa/";
 
-    public static final Map<String, List<String>> textIndex = new HashMap<String, List<String>>();
+    public static Map<String, List<String>> textIndex = new HashMap<String, List<String>>();
     public static final Map<String, List<String>> authorTextMap = new HashMap<String, List<String>>();
 
     public static final ObjectMapper om = new ObjectMapper();
@@ -89,6 +95,7 @@ public class MigrationApp
         propMapping.put("pubinfo_publisherDate", new PropInfo("publisherDate", false, false));
         propMapping.put("pubinfo_publisherLocation", new PropInfo("publisherLocation", false, false));
         propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true));
+        propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true));
         propMapping.put("hasCreator", new PropInfo("hasCreator", true, true));
         propMapping.put("hasArtist", new PropInfo("hasArtist", true, true));
         propMapping.put("hasAttributedAuthor", new PropInfo("hasCreator", true, true));
@@ -208,11 +215,93 @@ public class MigrationApp
         }
     }
 
+    public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName) {
+        if (type == "person") {
+            String queryString = "PREFIX per: <"+PERSON_PREFIX+">\n"
+                    + "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+                    + "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                    + "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\n"
+                    + "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n"
+                    + "SELECT ?eventType ?circa\n"
+                    + "WHERE {\n"
+                    + "  {\n"
+                    + "     ?b rdf:type per:Death .\n"
+                    + "     ?b per:event_circa ?circa .\n"
+                    + "     BIND (\"death\" AS ?eventType)\n"
+                    + "  } UNION {\n"
+                    + "     ?b rdf:type per:Birth .\n"
+                    + "     ?b per:event_circa ?circa .\n"
+                    + "     BIND (\"birth\" AS ?eventType)\n"
+                    + "  }\n"
+                    + "}\n" ;
+            Query query = QueryFactory.create(queryString) ;
+            try (QueryExecution qexec = QueryExecutionFactory.create(query, m)) {
+              ResultSet results = qexec.execSelect() ;
+              while (results.hasNext()) {
+                QuerySolution soln = results.nextSolution() ;
+                String circaString = soln.get("circa").asLiteral().getString();
+                String eventType = soln.get("eventType").asLiteral().getString();
+                rootNode.put(eventType, circaString);
+              }
+            }
+        } else if (type == "outline") {
+            Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
+            StmtIterator propIter = r.listProperties(p);
+            while(propIter.hasNext()) {
+                Statement s = propIter.nextStatement();
+                Resource o = s.getResource();
+                String oid = removePrefix(o.getURI());
+                ArrayNode a = (ArrayNode) rootNode.get("nodes");
+                if (a == null) {
+                    a = om.createArrayNode();
+                    rootNode.set("nodes", a);
+                }
+                ObjectNode nodeNode = om.createObjectNode();
+                a.add(nodeNode);
+                nodeNode.put("id", oid);
+                fillResourceInNode(m, o, oid, nodeNode, rootNode, type);
+            }
+        }
+    }
+    
+    public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String type) {
+        StmtIterator propIter = r.listProperties();
+        while(propIter.hasNext()) {
+            Statement s = propIter.nextStatement();
+            Property p = s.getPredicate();
+            String pBaseName = removePrefix(p.getURI());
+            //System.out.println(pBaseName);
+            PropInfo pInfo = propMapping.get(pBaseName);
+            if (pInfo == null) continue;
+            if (pInfo.isObjectProp) {
+                Resource o = s.getResource();
+                String oid = removePrefix(o.getURI());
+                addToOutput(currentNode, pInfo, oid);
+                if (pInfo.mappedProp.equals("hasCreator")) {
+                    addAuthorMapping(rName, oid);
+                }
+            } else {
+                Literal l = s.getLiteral();
+                // TODO: handle non-strings?
+                String lang = l.getLanguage();
+                if (lang.isEmpty()) {
+                    addToOutput(currentNode, pInfo, l.getString());
+                } else if (lang.equals("bo-x-ewts")) {
+                    String uniString = converter.toUnicode(l.getString());
+                    writeToIndex(uniString, rName, type);
+                    addToOutput(currentNode, pInfo, uniString);
+                }
+            }
+        }
+        fillTreeProperties(m, r, rootNode, type, rName);
+    }
+    
     public static void migrateOneFile(File file, String type) {
         if (file.isDirectory()) return;
         String fileName = file.getName();
         if (!fileName.endsWith(".jsonld")) return;
         String baseName = fileName.substring(0, fileName.length()-7);
+        //System.out.println("converting "+baseName);
         ObjectNode output = om.createObjectNode();
         String outfileName = baseName+".json";
         outfileName = OUTPUT_DIR+type+"s/"+outfileName;
@@ -224,40 +313,13 @@ public class MigrationApp
             System.err.println("unable to find resource "+mainResourceName);
             return;
         }
-        StmtIterator propIter = mainR.listProperties();
         if (type == "person") {
             List<String> workList = authorTextMap.get(baseName);
             if (workList == null) return; // if a person didn't write books, we just skip
             ArrayNode a = om.valueToTree(workList);
             output.set("creatorOf", a);
         }
-        while(propIter.hasNext()) {
-            Statement s = propIter.nextStatement();
-            Property p = s.getPredicate();
-            String pBaseName = removePrefix(p.getURI());
-            //System.out.println(pBaseName);
-            PropInfo pInfo = propMapping.get(pBaseName);
-            if (pInfo == null) continue;
-            if (pInfo.isObjectProp) {
-                Resource o = s.getResource();
-                String oid = removePrefix(o.getURI());
-                addToOutput(output, pInfo, oid);
-                if (pInfo.mappedProp.equals("hasCreator")) {
-                    addAuthorMapping(baseName, oid);
-                }
-            } else {
-                Literal l = s.getLiteral();
-                // TODO: handle non-strings?
-                String lang = l.getLanguage();
-                if (lang.isEmpty()) {
-                    addToOutput(output, pInfo, l.getString());
-                } else if (lang.equals("bo-x-ewts")) {
-                    String uniString = converter.toUnicode(l.getString());
-                    writeToIndex(uniString, baseName, type);
-                    addToOutput(output, pInfo, uniString);
-                }
-            }
-        }
+        fillResourceInNode(m, mainR, baseName, output, output, type);
         try {
             om.writeValue(new File(outfileName), output);
         } catch (IOException e) {
@@ -267,12 +329,18 @@ public class MigrationApp
     }
 
     public static void migrateType(String type) {
+        textIndex = new HashMap<String, List<String>>();
         createDirIfNotExists(OUTPUT_DIR+type+"s");
         String dirName = DATA_DIR+"tbrc-"+type+"s";
         File[] files = new File(dirName).listFiles();
         System.out.println("converting "+files.length+" "+type+" files");
         //Stream.of(files).parallel().forEach(file -> migrateOneFile(file, type));
         Stream.of(files).forEach(file -> migrateOneFile(file, type));
+        try {
+            om.writeValue(new File(OUTPUT_DIR+type+"Index.json"), textIndex);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public static void main( String[] args )
@@ -281,15 +349,10 @@ public class MigrationApp
         long startTime = System.currentTimeMillis();
         migrateType("work");
         migrateType("person");
-        //        migrateType("outline");
-        createDirIfNotExists(OUTPUT_DIR+"works");
+        migrateType("outline");
         //migrateOneFile(new File("src/test/resources/W12827.jsonld"), "work");
-        //        migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
-        try {
-            om.writeValue(new File(OUTPUT_DIR+"textIndex.json"), textIndex);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        //migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
+        //migrateOneFile(new File("src/test/resources/O2DB87572.jsonld"), "outline");
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
