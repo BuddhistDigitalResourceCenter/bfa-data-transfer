@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 import org.apache.jena.query.Query;
@@ -60,14 +62,19 @@ public class MigrationApp
     public static final String TOPIC_PREFIX = "http://purl.bdrc.io/ontology/topic#";
     public static final String VOLUMES_PREFIX = "http://purl.bdrc.io/ontology/volumes#";
     public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work/";
+    
+    public static final int INDEX_LIMIT_SIZE = 30000;
+    
     public static final EwtsConverter converter = new EwtsConverter();
 
     // extract tbrc/ folder of exist-db backup here:
     public static final String DATA_DIR = "../xmltoldmigration/tbrc-jsonld/";
     public static final String OUTPUT_DIR = "tbrc-bfa/";
 
-    public static Map<String, List<String>> textIndex = new HashMap<String, List<String>>();
+    public static Map<String, List<String>> textIndex = new TreeMap<String, List<String>>();
     public static final Map<String, List<String>> authorTextMap = new HashMap<String, List<String>>();
+    
+    public static List<String> nodeList = new ArrayList<String>();
 
     public static final ObjectMapper om = new ObjectMapper();
 
@@ -215,7 +222,7 @@ public class MigrationApp
         }
     }
 
-    public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName) {
+    public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName, String rootBaseName) {
         if (type == "person") {
             String queryString = "PREFIX per: <"+PERSON_PREFIX+">\n"
                     + "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
@@ -259,12 +266,17 @@ public class MigrationApp
                 ObjectNode nodeNode = om.createObjectNode();
                 a.add(nodeNode);
                 nodeNode.put("id", oid);
-                fillResourceInNode(m, o, oid, nodeNode, rootNode, type);
+                if (nodeList.contains(oid)) {
+                    System.err.println("outline node loop detected: node "+oid+" already encountered (treating "+rootBaseName+")");
+                    return;
+                }
+                nodeList.add(oid);
+                fillResourceInNode(m, o, oid, nodeNode, rootNode, rootBaseName, type);
             }
         }
     }
     
-    public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String type) {
+    public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         StmtIterator propIter = r.listProperties();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
@@ -281,6 +293,14 @@ public class MigrationApp
                     addAuthorMapping(rName, oid);
                 }
             } else {
+                if (type == "outline" && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
+                    // not interested in outline's main title, should be the same as the work
+                    continue;
+                }
+                if (type == "outline" && pInfo.mappedProp.equals("name")) {
+                    // not interested in outline names, just titles
+                    continue;
+                }
                 Literal l = s.getLiteral();
                 // TODO: handle non-strings?
                 String lang = l.getLanguage();
@@ -288,12 +308,13 @@ public class MigrationApp
                     addToOutput(currentNode, pInfo, l.getString());
                 } else if (lang.equals("bo-x-ewts")) {
                     String uniString = converter.toUnicode(l.getString());
-                    writeToIndex(uniString, rName, type);
+                    writeToIndex(uniString, rootName, type);
                     addToOutput(currentNode, pInfo, uniString);
+                    if (type == "outline") break; // just one title per outline
                 }
             }
         }
-        fillTreeProperties(m, r, rootNode, type, rName);
+        fillTreeProperties(m, r, rootNode, type, rName, rootName);
     }
     
     public static void migrateOneFile(File file, String type) {
@@ -319,7 +340,10 @@ public class MigrationApp
             ArrayNode a = om.valueToTree(workList);
             output.set("creatorOf", a);
         }
-        fillResourceInNode(m, mainR, baseName, output, output, type);
+        if (type == "outline") {
+            nodeList = new ArrayList<String>();
+        }
+        fillResourceInNode(m, mainR, baseName, output, output, baseName, type);
         try {
             om.writeValue(new File(outfileName), output);
         } catch (IOException e) {
@@ -328,6 +352,33 @@ public class MigrationApp
         // System.exit(0);
     }
 
+    public static void dumpMapInFile(Map<String,List<String>> textIndexChunk, String fileName) {
+        System.out.println("dumping "+textIndexChunk.size()+" entries to "+ fileName);
+        try {
+            om.writeValue(new File(OUTPUT_DIR+fileName), textIndexChunk);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public static void dumpIndex(String type) {
+        int i = 0;
+        int total = 0;
+        Map<String,List<String>> currentChunk = new HashMap<String,List<String>>();
+        for (Entry<String, List<String>> entry : textIndex.entrySet()) {
+            total = total + 1;
+            currentChunk.put(entry.getKey(), entry.getValue());
+            if (total > INDEX_LIMIT_SIZE) {
+                dumpMapInFile(currentChunk, type+"Index-"+i+".json");
+                i = i + 1;
+                total = 0;
+                currentChunk = new HashMap<String,List<String>>();
+            }
+        }
+        dumpMapInFile(currentChunk, type+"Index-"+i+".json");
+        textIndex = new HashMap<String, List<String>>();
+    }
+    
     public static void migrateType(String type) {
         textIndex = new HashMap<String, List<String>>();
         createDirIfNotExists(OUTPUT_DIR+type+"s");
@@ -336,11 +387,7 @@ public class MigrationApp
         System.out.println("converting "+files.length+" "+type+" files");
         //Stream.of(files).parallel().forEach(file -> migrateOneFile(file, type));
         Stream.of(files).forEach(file -> migrateOneFile(file, type));
-        try {
-            om.writeValue(new File(OUTPUT_DIR+type+"Index.json"), textIndex);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        dumpIndex(type);
     }
 
     public static void main( String[] args )
@@ -353,6 +400,7 @@ public class MigrationApp
         //migrateOneFile(new File("src/test/resources/W12827.jsonld"), "work");
         //migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
         //migrateOneFile(new File("src/test/resources/O2DB87572.jsonld"), "outline");
+        //  migrateOneFile(new File("O1LS2931.jsonld"), "outline");
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
