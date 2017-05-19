@@ -62,6 +62,7 @@ public class MigrationApp
     public static final String TOPIC_PREFIX = "http://purl.bdrc.io/ontology/topic#";
     public static final String VOLUMES_PREFIX = "http://purl.bdrc.io/ontology/volumes#";
     public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work/";
+    public static final String RDFS_PREFIX = "http://www.w3.org/2000/01/rdf-schema#";
     
     public static final int INDEX_LIMIT_SIZE = 30000;
     
@@ -81,6 +82,7 @@ public class MigrationApp
     public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
 
     static {
+        propMapping.put("status", new PropInfo("status", false, false));
         propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false));
         propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false));
         propMapping.put("bibliographicalTitle", new PropInfo("title", true, false));
@@ -158,7 +160,7 @@ public class MigrationApp
     }
 
     public static void writeToIndex(String titleOrName, String id, String type) {
-        if (titleOrName.isEmpty()) return;
+        if (titleOrName == null || titleOrName.isEmpty()) return;
         List<String> ridList = textIndex.get(titleOrName);
         if (ridList == null) {
             ridList = new ArrayList<String>();
@@ -276,7 +278,28 @@ public class MigrationApp
         }
     }
     
+    public static String getLabel(Model m, Resource r) {
+        String res = null;
+        Property p = m.getProperty(RDFS_PREFIX+"label");
+        StmtIterator propIter = r.listProperties(p);
+        while(propIter.hasNext()) {
+            Statement s = propIter.nextStatement();
+            Literal l = s.getLiteral();
+            String lang = l.getLanguage();
+            if (lang.equals("bo-x-ewts")) {
+                return converter.toUnicode(l.getString());
+            }
+        }
+        return res;
+    }
+    
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
+        String label = null;
+        if (type == "person" || type == "work") {
+            label = getLabel(m, r);
+            writeToIndex(label, rootName, type);
+            addToOutput(currentNode, new PropInfo((type == "person" ? "name" : "title"), true, false), label);
+        }
         StmtIterator propIter = r.listProperties();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
@@ -293,12 +316,16 @@ public class MigrationApp
                     addAuthorMapping(rName, oid);
                 }
             } else {
-                if (type == "outline" && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
+                if (type.equals("outline") && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
                     // not interested in outline's main title, should be the same as the work
                     continue;
                 }
-                if (type == "outline" && pInfo.mappedProp.equals("name")) {
+                if (type.equals("outline") && pInfo.mappedProp.equals("name")) {
                     // not interested in outline names, just titles
+                    continue;
+                }
+                if (!type.equals("work") && pInfo.mappedProp.equals("status")) {
+                    // only interested in work status
                     continue;
                 }
                 Literal l = s.getLiteral();
@@ -308,6 +335,9 @@ public class MigrationApp
                     addToOutput(currentNode, pInfo, l.getString());
                 } else if (lang.equals("bo-x-ewts")) {
                     String uniString = converter.toUnicode(l.getString());
+                    if (label != null && label.equals(uniString)) {
+                        continue;
+                    }
                     writeToIndex(uniString, rootName, type);
                     addToOutput(currentNode, pInfo, uniString);
                     if (type == "outline") break; // just one title per outline
