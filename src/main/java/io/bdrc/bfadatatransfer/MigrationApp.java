@@ -75,6 +75,9 @@ public class MigrationApp
     public static Map<String, List<String>> textIndex = new TreeMap<String, List<String>>();
     public static final Map<String, List<String>> authorTextMap = new HashMap<String, List<String>>();
     
+    public static final Map<String, String> outlineWorkTitleMap = new HashMap<String, String>();
+    public static final Map<String, String> workOutlineIdMap = new HashMap<String, String>();
+    
     public static List<String> nodeList = new ArrayList<String>();
 
     public static final ObjectMapper om = new ObjectMapper();
@@ -295,10 +298,16 @@ public class MigrationApp
     
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         String label = null;
-        if (type == "person" || type == "work") {
+        if (type.equals("person") || type.equals("work")) {
             label = getLabel(m, r);
             writeToIndex(label, rootName, type);
             addToOutput(currentNode, new PropInfo((type == "person" ? "name" : "title"), true, false), label);
+            if (type.equals("work")) {
+                String outlineId = workOutlineIdMap.get(rootName);
+                if (outlineId != null) {
+                    outlineWorkTitleMap.put(outlineId, label);
+                }
+            }
         }
         StmtIterator propIter = r.listProperties();
         while(propIter.hasNext()) {
@@ -314,6 +323,9 @@ public class MigrationApp
                 addToOutput(currentNode, pInfo, oid);
                 if (pInfo.mappedProp.equals("hasCreator")) {
                     addAuthorMapping(rName, oid);
+                }
+                if (pInfo.mappedProp.equals("isOutlineOf")) {
+                    workOutlineIdMap.put(oid, rootName);
                 }
             } else {
                 if (type.equals("outline") && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
@@ -338,7 +350,7 @@ public class MigrationApp
                     if (label != null && label.equals(uniString)) {
                         continue;
                     }
-                    writeToIndex(uniString, rootName, type);
+                    writeToIndex(uniString, rootName+'-'+rName, type);
                     addToOutput(currentNode, pInfo, uniString);
                     if (type == "outline") break; // just one title per outline
                 }
@@ -364,16 +376,17 @@ public class MigrationApp
             System.err.println("unable to find resource "+mainResourceName);
             return;
         }
-        if (type == "person") {
+        if (type.equals("person")) {
             List<String> workList = authorTextMap.get(baseName);
             if (workList == null) return; // if a person didn't write books, we just skip
             ArrayNode a = om.valueToTree(workList);
             output.set("creatorOf", a);
         }
-        if (type == "outline") {
+        if (type.equals("outline")) {
             nodeList = new ArrayList<String>();
         }
         fillResourceInNode(m, mainR, baseName, output, output, baseName, type);
+        if (output.size() < 2) return;
         try {
             om.writeValue(new File(outfileName), output);
         } catch (IOException e) {
@@ -424,9 +437,15 @@ public class MigrationApp
     {
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
-        migrateType("work");
-        migrateType("person");
         migrateType("outline");
+        migrateType("work");
+        //migrateType("person");
+        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to "+  "outlineWorkTitle.json");
+        try {
+            om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         //migrateOneFile(new File("src/test/resources/W12827.jsonld"), "work");
         //migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
         //migrateOneFile(new File("src/test/resources/O2DB87572.jsonld"), "outline");
