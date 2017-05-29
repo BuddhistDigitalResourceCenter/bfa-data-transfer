@@ -269,7 +269,6 @@ public class MigrationApp
                     rootNode.set("nodes", a);
                 }
                 ObjectNode nodeNode = om.createObjectNode();
-                a.add(nodeNode);
                 nodeNode.put("id", oid);
                 if (nodeList.contains(oid)) {
                     System.err.println("outline node loop detected: node "+oid+" already encountered (treating "+rootBaseName+")");
@@ -277,6 +276,9 @@ public class MigrationApp
                 }
                 nodeList.add(oid);
                 fillResourceInNode(m, o, oid, nodeNode, rootNode, rootBaseName, type);
+                if (nodeNode.size() > 1) {
+                    a.add(nodeNode);                    
+                }
             }
         }
     }
@@ -386,7 +388,6 @@ public class MigrationApp
             nodeList = new ArrayList<String>();
         }
         fillResourceInNode(m, mainR, baseName, output, output, baseName, type);
-        if (output.size() < 2) return;
         try {
             om.writeValue(new File(outfileName), output);
         } catch (IOException e) {
@@ -440,7 +441,7 @@ public class MigrationApp
         migrateType("outline");
         migrateType("work");
         //migrateType("person");
-        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to "+  "outlineWorkTitle.json");
+        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
         try {
             om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
         } catch (IOException e) {
