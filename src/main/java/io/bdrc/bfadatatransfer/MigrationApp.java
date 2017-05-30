@@ -308,7 +308,6 @@ public class MigrationApp
               }
             }
         } else if (type.equals("outline")) {
-            fillLocations(m, r, rootNode);
             Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
             StmtIterator propIter = r.listProperties(p);
             while(propIter.hasNext()) {
@@ -322,6 +321,7 @@ public class MigrationApp
                 }
                 ObjectNode nodeNode = om.createObjectNode();
                 nodeNode.put("id", oid);
+                fillLocations(m, o, nodeNode);
                 if (nodeList.contains(oid)) {
                     System.err.println("outline node loop detected: node "+oid+" already encountered (treating "+rootBaseName+")");
                     return;
