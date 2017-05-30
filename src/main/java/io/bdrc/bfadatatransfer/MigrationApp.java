@@ -78,7 +78,7 @@ public class MigrationApp
     public static final Map<String, String> outlineWorkTitleMap = new HashMap<String, String>();
     public static final Map<String, String> workOutlineIdMap = new HashMap<String, String>();
     
-    public static final Map<String, ObjectNode> workVolumesMap = new HashMap<String, ObjectNode>();
+    public static final Map<String, ArrayNode> workVolumesMap = new HashMap<String, ArrayNode>();
     
     public static List<String> nodeList = new ArrayList<String>();
 
@@ -373,7 +373,7 @@ public class MigrationApp
         String workId = 'W'+volumesId.substring(1);
         Property p = m.getProperty(VOLUMES_PREFIX+"hasVolume");
         StmtIterator propIter = r.listProperties(p);
-        ObjectNode volumesNode = om.createObjectNode();
+        ArrayNode volumesNode = om.createArrayNode();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
             Resource o = s.getResource();
@@ -381,12 +381,13 @@ public class MigrationApp
             String imageGroupId = oid.substring(oid.lastIndexOf("_") + 1);
             ObjectNode volumeNode = om.createObjectNode();
             volumeNode.put("id", imageGroupId);
-            String volnum = o.getProperty(m.getProperty(VOLUMES_PREFIX+"number")).getString();
+            int volnum = o.getProperty(m.getProperty(VOLUMES_PREFIX+"number")).getInt();
             Statement totalPag = o.getProperty(m.getProperty(VOLUMES_PREFIX+"pages_total"));
             if (totalPag != null) {
                 int totalPagInt = totalPag.getInt();
                 volumeNode.put("total", totalPagInt);
-                volumesNode.set(volnum, volumeNode);
+                volumeNode.put("num", volnum);
+                volumesNode.add(volumeNode);
             }
         }
         if (volumesNode.size() > 0) {
@@ -424,7 +425,7 @@ public class MigrationApp
             output.set("creatorOf", a);
         }
         if (type.equals("work")) {
-            ObjectNode volumesNode = workVolumesMap.get(baseName);
+            ArrayNode volumesNode = workVolumesMap.get(baseName);
             if (volumesNode != null) {
                 output.set("volumeMap", volumesNode);
             }
