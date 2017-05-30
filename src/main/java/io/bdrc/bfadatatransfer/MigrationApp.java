@@ -231,6 +231,52 @@ public class MigrationApp
             output.put(pInfo.mappedProp, value);
         }
     }
+    
+    public static void fillLocations(Model m, Resource r, ObjectNode rootNode) {
+        Property beginsAtProp = m.getProperty(OUTLINE_PREFIX+"beginsAt");
+        Property endsAtProp = m.getProperty(OUTLINE_PREFIX+"endsAt");
+        Property volumeProp = m.getProperty(WORK_PREFIX+"volume");
+        Property pageProp = m.getProperty(WORK_PREFIX+"page");
+        Statement s = r.getProperty(beginsAtProp);
+        if (s == null) return;
+        Resource location = s.getResource();
+        Statement pageStatement = location.getProperty(pageProp);
+        if (pageStatement == null) return;
+        int beginPage = 0;
+        try {
+            beginPage = pageStatement.getInt();
+        } catch (Exception e) {
+            //System.err.println(pageStatement);
+            //System.err.println(e.getMessage());
+            return;
+        }
+        Statement volumeStatement = location.getProperty(volumeProp);
+        if (volumeStatement == null) return;
+        int volume = volumeStatement.getInt();
+        s = r.getProperty(endsAtProp);
+        if (s == null) return;
+        location = s.getResource();
+        pageStatement = location.getProperty(pageProp);
+        if (pageStatement == null) return;
+        int endPage;
+        try {
+            endPage = pageStatement.getInt();
+        } catch (Exception e) {
+            //System.err.println(pageStatement);
+            //System.err.println(e.getMessage());
+            return;
+        }
+        volumeStatement = location.getProperty(volumeProp);
+        if (volumeStatement == null) return;
+        int volumeEnd = volumeStatement.getInt();
+        if (volumeEnd != volume) {
+        //    System.err.println("at node "+r+" : cross volume locations");
+            rootNode.put("volumeEnd", volumeEnd);
+        }
+        rootNode.put("beginsAt", beginPage);
+        rootNode.put("volume", volume);
+        rootNode.put("endsAt", endPage);
+    }
 
     public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName, String rootBaseName) {
         if (type.equals("person")) {
@@ -261,9 +307,8 @@ public class MigrationApp
                 rootNode.put(eventType, circaString);
               }
             }
-//        } else if (type.equals("work")) {
-//            Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
         } else if (type.equals("outline")) {
+            fillLocations(m, r, rootNode);
             Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
             StmtIterator propIter = r.listProperties(p);
             while(propIter.hasNext()) {
@@ -486,9 +531,9 @@ public class MigrationApp
     {
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
-        //migrateType("outline");
-        migrateType("volume");
-        migrateType("work");
+        migrateType("outline");
+        //migrateType("volume");
+        //migrateType("work");
         //migrateType("person");
         System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
         try {
