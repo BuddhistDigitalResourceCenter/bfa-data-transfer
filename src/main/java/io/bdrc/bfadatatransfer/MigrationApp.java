@@ -61,7 +61,7 @@ public class MigrationApp
     public static final String PLACE_PREFIX = "http://purl.bdrc.io/ontology/place#";
     public static final String TOPIC_PREFIX = "http://purl.bdrc.io/ontology/topic#";
     public static final String VOLUMES_PREFIX = "http://purl.bdrc.io/ontology/volumes#";
-    public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work/";
+    public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work#";
     public static final String RDFS_PREFIX = "http://www.w3.org/2000/01/rdf-schema#";
     
     public static final int INDEX_LIMIT_SIZE = 30000;
@@ -77,6 +77,8 @@ public class MigrationApp
     
     public static final Map<String, String> outlineWorkTitleMap = new HashMap<String, String>();
     public static final Map<String, String> workOutlineIdMap = new HashMap<String, String>();
+    
+    public static final Map<String, ObjectNode> workVolumesMap = new HashMap<String, ObjectNode>();
     
     public static List<String> nodeList = new ArrayList<String>();
 
@@ -188,6 +190,7 @@ public class MigrationApp
         try {
             model.read(fStream, null, "JSON-LD") ;
         } catch (RiotException e) {
+            System.err.println(f.getAbsolutePath());
             e.printStackTrace();
             return null;
         }
@@ -198,6 +201,8 @@ public class MigrationApp
         switch(type) {
         case "work":
             return WORK_PREFIX+baseName;
+        case "volume":
+            return VOLUMES_PREFIX+baseName;
         case "person":
             return PERSON_PREFIX+baseName;
         default:
@@ -228,7 +233,7 @@ public class MigrationApp
     }
 
     public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName, String rootBaseName) {
-        if (type == "person") {
+        if (type.equals("person")) {
             String queryString = "PREFIX per: <"+PERSON_PREFIX+">\n"
                     + "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
                     + "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
@@ -256,7 +261,9 @@ public class MigrationApp
                 rootNode.put(eventType, circaString);
               }
             }
-        } else if (type == "outline") {
+//        } else if (type.equals("work")) {
+//            Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
+        } else if (type.equals("outline")) {
             Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
             StmtIterator propIter = r.listProperties(p);
             while(propIter.hasNext()) {
@@ -361,21 +368,53 @@ public class MigrationApp
         fillTreeProperties(m, r, rootNode, type, rName, rootName);
     }
     
+    private static void fillVolumes(Model m, Resource r, String mainResourceName) {
+        String volumesId = removePrefix(r.getURI());
+        String workId = 'W'+volumesId.substring(1);
+        Property p = m.getProperty(VOLUMES_PREFIX+"hasVolume");
+        StmtIterator propIter = r.listProperties(p);
+        ObjectNode volumesNode = om.createObjectNode();
+        while(propIter.hasNext()) {
+            Statement s = propIter.nextStatement();
+            Resource o = s.getResource();
+            String oid = removePrefix(o.getURI());
+            String imageGroupId = oid.substring(oid.lastIndexOf("_") + 1);
+            ObjectNode volumeNode = om.createObjectNode();
+            volumeNode.put("id", imageGroupId);
+            String volnum = o.getProperty(m.getProperty(VOLUMES_PREFIX+"number")).getString();
+            Statement totalPag = o.getProperty(m.getProperty(VOLUMES_PREFIX+"pages_total"));
+            if (totalPag != null) {
+                int totalPagInt = totalPag.getInt();
+                volumeNode.put("total", totalPagInt);
+                volumesNode.set(volnum, volumeNode);
+            }
+        }
+        if (volumesNode.size() > 0) {
+            workVolumesMap.put(workId, volumesNode);
+        }
+    }
+    
     public static void migrateOneFile(File file, String type) {
         if (file.isDirectory()) return;
         String fileName = file.getName();
         if (!fileName.endsWith(".jsonld")) return;
         String baseName = fileName.substring(0, fileName.length()-7);
-        //System.out.println("converting "+baseName);
         ObjectNode output = om.createObjectNode();
         String outfileName = baseName+".json";
         outfileName = OUTPUT_DIR+type+"s/"+outfileName;
         Model m = modelFromFile(file);
-        if (m == null) return;
+        if (m == null) {
+            System.err.println("cannot read model from file "+file.getAbsolutePath());
+            return;
+        }
         String mainResourceName = getFullUrlFromBaseFileName(baseName, type);
         Resource mainR = m.getResource(mainResourceName);
         if (mainR == null) {
             System.err.println("unable to find resource "+mainResourceName);
+            return;
+        }
+        if (type.equals("volume")) {
+            fillVolumes(m, mainR, mainResourceName);
             return;
         }
         if (type.equals("person")) {
@@ -383,6 +422,12 @@ public class MigrationApp
             if (workList == null) return; // if a person didn't write books, we just skip
             ArrayNode a = om.valueToTree(workList);
             output.set("creatorOf", a);
+        }
+        if (type.equals("work")) {
+            ObjectNode volumesNode = workVolumesMap.get(baseName);
+            if (volumesNode != null) {
+                output.set("volumeMap", volumesNode);
+            }
         }
         if (type.equals("outline")) {
             nodeList = new ArrayList<String>();
@@ -419,14 +464,16 @@ public class MigrationApp
                 currentChunk = new HashMap<String,List<String>>();
             }
         }
-        dumpMapInFile(currentChunk, type+"Index-"+i+".json");
+        if (!type.equals("volume")) {
+            dumpMapInFile(currentChunk, type+"Index-"+i+".json");
+        }
         textIndex = new HashMap<String, List<String>>();
     }
     
     public static void migrateType(String type) {
         textIndex = new HashMap<String, List<String>>();
         createDirIfNotExists(OUTPUT_DIR+type+"s");
-        String dirName = DATA_DIR+"tbrc-"+type+"s";
+        String dirName = DATA_DIR+type+"s";
         File[] files = new File(dirName).listFiles();
         System.out.println("converting "+files.length+" "+type+" files");
         //Stream.of(files).parallel().forEach(file -> migrateOneFile(file, type));
@@ -438,7 +485,8 @@ public class MigrationApp
     {
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
-        migrateType("outline");
+        //migrateType("outline");
+        migrateType("volume");
         migrateType("work");
         //migrateType("person");
         System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
