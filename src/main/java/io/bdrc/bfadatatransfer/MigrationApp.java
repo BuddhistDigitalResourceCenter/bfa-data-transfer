@@ -43,12 +43,14 @@ public class MigrationApp
         String mappedProp;
         boolean inArray;
         boolean isObjectProp;
+        boolean toIndex;
 
-        public PropInfo(String mappedProp, boolean inArray, boolean isObjectProp)
+        public PropInfo(String mappedProp, boolean inArray, boolean isObjectProp, boolean toIndex)
         {
             this.mappedProp = mappedProp;
             this.inArray = inArray;
             this.isObjectProp = isObjectProp;
+            this.toIndex = toIndex;
         }
     }
 
@@ -64,7 +66,7 @@ public class MigrationApp
     public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work#";
     public static final String RDFS_PREFIX = "http://www.w3.org/2000/01/rdf-schema#";
     
-    public static final int INDEX_LIMIT_SIZE = 30000;
+    public static final int INDEX_LIMIT_SIZE = 10000;
     
     public static final EwtsConverter converter = new EwtsConverter();
 
@@ -87,59 +89,60 @@ public class MigrationApp
     public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
 
     static {
-        propMapping.put("status", new PropInfo("status", false, false));
-        propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false));
-        propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false));
-        propMapping.put("bibliographicalTitle", new PropInfo("title", true, false));
-        propMapping.put("captionTitle", new PropInfo("title", true, false));
-        propMapping.put("colophonTitle", new PropInfo("title", true, false));
-        propMapping.put("copyrightPageTitle", new PropInfo("title", true, false));
-        propMapping.put("coverTitle", new PropInfo("title", true, false));
-        propMapping.put("dkarChagTitle", new PropInfo("title", true, false));
-        propMapping.put("fullTitle", new PropInfo("title", true, false));
-        propMapping.put("halfTitle", new PropInfo("title", true, false));
-        propMapping.put("incipit", new PropInfo("title", true, false));
-        propMapping.put("otherTitle", new PropInfo("title", true, false));
-        propMapping.put("runningTitle", new PropInfo("title", true, false));
-        propMapping.put("sectionTitle", new PropInfo("title", true, false));
-        propMapping.put("spineTitle", new PropInfo("title", true, false));
-        propMapping.put("titlePageTitle", new PropInfo("title", true, false));
-        propMapping.put("subtitle", new PropInfo("title", true, false));
-        propMapping.put("pubinfo_printType", new PropInfo("printType", false, false));
-        propMapping.put("pubinfo_publisherDate", new PropInfo("publisherDate", false, false));
-        propMapping.put("pubinfo_publisherLocation", new PropInfo("publisherLocation", false, false));
-        propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true));
-        propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true));
-        propMapping.put("hasCreator", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasArtist", new PropInfo("hasArtist", true, true));
-        propMapping.put("hasAttributedAuthor", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasBard", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasCalligrapher", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasCommentator", new PropInfo("hasCreator", true, true)); // ?
-        propMapping.put("hasContributingAuthor", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasEditor", new PropInfo("hasCreator", true, true)); // ?
-        propMapping.put("hasMainAuthor", new PropInfo("hasCreator", true, true)); 
-        propMapping.put("hasPandita", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasScribe", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasTerton", new PropInfo("hasCreator", true, true));
-        propMapping.put("hasTranslator", new PropInfo("hasCreator", true, true)); // ?
-        propMapping.put("name", new PropInfo("name", true, false));
-        propMapping.put("bodhisattvaVowName", new PropInfo("name", true, false));
-        propMapping.put("commonName", new PropInfo("name", true, false));
-        propMapping.put("corporateName", new PropInfo("name", true, false));
-        propMapping.put("familyName", new PropInfo("name", true, false));
-        propMapping.put("finalOrdinationName", new PropInfo("name", true, false));
-        propMapping.put("fiestOrdinationName", new PropInfo("name", true, false));
-        propMapping.put("gTerStonTitle", new PropInfo("name", true, false));
-        propMapping.put("officeTitle", new PropInfo("name", true, false));
-        propMapping.put("otherName", new PropInfo("name", true, false));
-        propMapping.put("penName", new PropInfo("name", true, false));
-        propMapping.put("pesonalName", new PropInfo("name", true, false));
-        propMapping.put("personTitle", new PropInfo("name", true, false));
-        propMapping.put("primaryName", new PropInfo("name", true, false));
-        propMapping.put("primaryTitle", new PropInfo("name", true, false));
-        propMapping.put("tulkuTitle", new PropInfo("name", true, false));
-        propMapping.put("secretInitiatoryName", new PropInfo("name", true, false));
+        propMapping.put("status", new PropInfo("status", false, false, false));
+        propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false, false));
+        propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false, false));
+        propMapping.put("bibliographicalTitle", new PropInfo("title", true, false, true));
+        propMapping.put("captionTitle", new PropInfo("title", true, false, true));
+        propMapping.put("colophonTitle", new PropInfo("title", true, false, false));
+        propMapping.put("copyrightPageTitle", new PropInfo("title", true, false, true));
+        propMapping.put("coverTitle", new PropInfo("title", true, false, true));
+        propMapping.put("dkarChagTitle", new PropInfo("title", true, false, true));
+        propMapping.put("fullTitle", new PropInfo("title", true, false, true));
+        propMapping.put("halfTitle", new PropInfo("title", true, false, true));
+        propMapping.put("incipit", new PropInfo("title", true, false, false));
+        propMapping.put("otherTitle", new PropInfo("title", true, false, true));
+        propMapping.put("runningTitle", new PropInfo("title", true, false, true));
+        propMapping.put("sectionTitle", new PropInfo("title", true, false, true));
+        propMapping.put("spineTitle", new PropInfo("title", true, false, true));
+        propMapping.put("titlePageTitle", new PropInfo("title", true, false, true));
+        propMapping.put("subtitle", new PropInfo("title", true, false, true));
+        propMapping.put("pubinfo_printType", new PropInfo("printType", false, false, false));
+        propMapping.put("pubinfo_publisherDate", new PropInfo("publisherDate", false, false, false));
+        propMapping.put("pubinfo_publisherName", new PropInfo("publisherName", false, false, false));
+        propMapping.put("pubinfo_publisherLocation", new PropInfo("publisherLocation", false, false, false));
+        propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true, false));
+        propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true, false));
+        propMapping.put("hasCreator", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasArtist", new PropInfo("hasArtist", true, true, false));
+        propMapping.put("hasAttributedAuthor", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasBard", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasCalligrapher", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasCommentator", new PropInfo("hasCreator", true, true, false)); // ?
+        propMapping.put("hasContributingAuthor", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasEditor", new PropInfo("hasCreator", true, true, false)); // ?
+        propMapping.put("hasMainAuthor", new PropInfo("hasCreator", true, true, false)); 
+        propMapping.put("hasPandita", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasScribe", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasTerton", new PropInfo("hasCreator", true, true, false));
+        propMapping.put("hasTranslator", new PropInfo("hasCreator", true, true, false)); // ?
+        propMapping.put("name", new PropInfo("name", true, false, true));
+        propMapping.put("bodhisattvaVowName", new PropInfo("name", true, false, true));
+        propMapping.put("commonName", new PropInfo("name", true, false, true));
+        propMapping.put("corporateName", new PropInfo("name", true, false, true));
+        propMapping.put("familyName", new PropInfo("name", true, false, true));
+        propMapping.put("finalOrdinationName", new PropInfo("name", true, false, true));
+        propMapping.put("fiestOrdinationName", new PropInfo("name", true, false, true));
+        propMapping.put("gTerStonTitle", new PropInfo("name", true, false, true));
+        propMapping.put("officeTitle", new PropInfo("name", true, false, true));
+        propMapping.put("otherName", new PropInfo("name", true, false, true));
+        propMapping.put("penName", new PropInfo("name", true, false, true));
+        propMapping.put("pesonalName", new PropInfo("name", true, false, true));
+        propMapping.put("personTitle", new PropInfo("name", true, false, true));
+        propMapping.put("primaryName", new PropInfo("name", true, false, true));
+        propMapping.put("primaryTitle", new PropInfo("name", true, false, true));
+        propMapping.put("tulkuTitle", new PropInfo("name", true, false, true));
+        propMapping.put("secretInitiatoryName", new PropInfo("name", true, false, true));
     }
 
     public static void createDirIfNotExists(String dir) {
@@ -252,7 +255,12 @@ public class MigrationApp
         }
         Statement volumeStatement = location.getProperty(volumeProp);
         if (volumeStatement == null) return;
-        int volume = volumeStatement.getInt();
+        int volume;
+        try {
+            volume = volumeStatement.getInt();
+        } catch (Exception e) {
+            return;
+        }
         s = r.getProperty(endsAtProp);
         if (s == null) return;
         location = s.getResource();
@@ -268,7 +276,12 @@ public class MigrationApp
         }
         volumeStatement = location.getProperty(volumeProp);
         if (volumeStatement == null) return;
-        int volumeEnd = volumeStatement.getInt();
+        int volumeEnd;
+        try {
+            volumeEnd = volumeStatement.getInt();
+        } catch (Exception e) {
+            return;
+        }
         if (volumeEnd != volume) {
         //    System.err.println("at node "+r+" : cross volume locations");
             rootNode.put("volumeEnd", volumeEnd);
@@ -355,7 +368,7 @@ public class MigrationApp
         if (type.equals("person") || type.equals("work")) {
             label = getLabel(m, r);
             writeToIndex(label, rootName, type);
-            addToOutput(currentNode, new PropInfo((type == "person" ? "name" : "title"), true, false), label);
+            addToOutput(currentNode, new PropInfo((type == "person" ? "name" : "title"), true, false, true), label);
             if (type.equals("work")) {
                 String outlineId = workOutlineIdMap.get(rootName);
                 if (outlineId != null) {
@@ -404,7 +417,12 @@ public class MigrationApp
                     if (label != null && label.equals(uniString)) {
                         continue;
                     }
-                    writeToIndex(uniString, rootName+'-'+rName, type);
+                    if (pInfo.toIndex) {
+                        if (type.equals("outline"))
+                            writeToIndex(uniString, rootName+'-'+rName, type);
+                        else
+                            writeToIndex(uniString, rootName, type);
+                    }
                     addToOutput(currentNode, pInfo, uniString);
                     if (type == "outline") break; // just one title per outline
                 }
@@ -532,9 +550,9 @@ public class MigrationApp
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
         migrateType("outline");
-        //migrateType("volume");
-        //migrateType("work");
-        //migrateType("person");
+        migrateType("volume");
+        migrateType("work");
+        migrateType("person");
         System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
         try {
             om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
@@ -542,6 +560,7 @@ public class MigrationApp
             e.printStackTrace();
         }
         //migrateOneFile(new File("src/test/resources/W12827.jsonld"), "work");
+//        migrateOneFile(new File("test.jsonld"), "outline");
         //migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
         //migrateOneFile(new File("src/test/resources/O2DB87572.jsonld"), "outline");
         //  migrateOneFile(new File("O1LS2931.jsonld"), "outline");
