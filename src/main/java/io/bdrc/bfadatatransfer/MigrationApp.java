@@ -83,6 +83,7 @@ public class MigrationApp
     public static final String OUTPUT_DIR = "tbrc-bfa/";
 
     public static Map<String, List<String>> textIndex = new TreeMap<String, List<String>>();
+    public static Map<String, List<String>> outlineIndex = new TreeMap<String, List<String>>();
     public static final Map<String, List<String>> authorTextMap = new HashMap<String, List<String>>();
     
     public static final Map<String, String> outlineWorkTitleMap = new HashMap<String, String>();
@@ -140,10 +141,11 @@ public class MigrationApp
 
     public static void writeToIndex(String titleOrName, String id, String type) {
         if (titleOrName == null || titleOrName.isEmpty()) return;
-        List<String> ridList = textIndex.get(titleOrName);
+        Map<String, List<String>> index = (type.equals("outline")) ? outlineIndex : textIndex;
+        List<String> ridList = index.get(titleOrName);
         if (ridList == null) {
             ridList = new ArrayList<String>();
-            textIndex.put(titleOrName, ridList);
+            index.put(titleOrName, ridList);
             ridList.add(id);
         } else {
             if (!ridList.contains(id)) {
@@ -336,23 +338,35 @@ public class MigrationApp
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         String label = null;
         StmtIterator propIter = r.listProperties();
+        String outlineId = null;
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
             Property p = s.getPredicate();
             String pBaseName = p.getLocalName();
-            //System.out.println(pBaseName);
             PropInfo pInfo = propMapping.get(pBaseName);
+            if (pBaseName.equals("outline")) {
+                Resource o = s.getResource();
+                outlineId = o.getProperty(m.getProperty(ADM, "workLegacyNode")).getString();
+                rootNode.put("outlinedBy", outlineId);
+                continue;
+            }
             if (pInfo == null) continue;
             if (pInfo.isObjectProp) {
                 Resource o = s.getResource();
                 if (pInfo.isSimpleObjectProp) {
                     Literal l = o.getProperty(RDFS.label).getLiteral();
                     String lang = l.getLanguage();
-                    if (lang.equals("bo")) {
-                        addToOutput(currentNode, pInfo, l.getString());
-                    } else if (lang.equals("bo-x-ewts")) {
-                        String uniString = converter.toUnicode(l.getString());
-                        addToOutput(currentNode, pInfo, uniString);
+                    String ls = l.getString();
+                    if (lang.equals("bo-x-ewts"))
+                        ls = converter.toUnicode(ls);
+                    else if (!lang.equals("bo"))
+                        continue;
+                    addToOutput(currentNode, pInfo, ls);
+                    if (pInfo.toIndex) {
+                        if (!rName.equals(rootName))
+                            writeToIndex(ls, rootName+'-'+rName, "outline");
+                        else
+                            writeToIndex(ls, rootName, type);
                     }
                 } else {
                     String oid = o.getLocalName();
@@ -385,8 +399,8 @@ public class MigrationApp
                         continue;
                     }
                     if (pInfo.toIndex) {
-                        if (type.equals("outline"))
-                            writeToIndex(uniString, rootName+'-'+rName, type);
+                        if (!rName.equals(rootName))
+                            writeToIndex(uniString, rootName+'-'+rName, "outline");
                         else
                             writeToIndex(uniString, rootName, type);
                     }
@@ -395,6 +409,9 @@ public class MigrationApp
                 }
             }
         }
+        if (outlineId != null) {
+            rootName = outlineId;
+        }
         fillTreeProperties(m, r, rootNode, type, rName, rootName);
     }
     
@@ -402,7 +419,6 @@ public class MigrationApp
         String volumesId = r.getLocalName();
         String workId = 'W'+volumesId.substring(1);
         workId = workId.substring(0, workId.indexOf('_'));
-        System.out.println(workId);
         Property p = m.getProperty(BDO, "itemHasVolume");
         StmtIterator propIter = r.listProperties(p);
         ArrayNode volumesNode = om.createArrayNode();
@@ -471,12 +487,35 @@ public class MigrationApp
             nodeList = new ArrayList<String>();
         }
         fillResourceInNode(m, mainR, baseName, output, output, baseName, type);
+        ObjectNode outline = null;
+        if (type.equals("work")) {
+            outline = splitOutline(output, baseName);
+            if (outline != null) {
+                String outlineId = output.get("outlinedBy").asText();
+                String outlineFileName = OUTPUT_DIR+"outlines/"+outlineId+".json";
+                try {
+                    om.writeValue(new File(outlineFileName), outline);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
         try {
             om.writeValue(new File(outfileName), output);
         } catch (IOException e) {
             e.printStackTrace();
         }
         // System.exit(0);
+    }
+
+    private static ObjectNode splitOutline(ObjectNode output, String workId) {
+        if (!output.hasNonNull("outlinedBy"))
+            return null;
+        ObjectNode res = om.createObjectNode();
+        res.put("isOutlineOf", workId);
+        res.set("nodes", output.get("nodes"));
+        output.remove("nodes");
+        return res;
     }
 
     public static void dumpMapInFile(Map<String,List<String>> textIndexChunk, String fileName) {
@@ -492,7 +531,8 @@ public class MigrationApp
         int i = 0;
         int total = 0;
         Map<String,List<String>> currentChunk = new HashMap<String,List<String>>();
-        for (Entry<String, List<String>> entry : textIndex.entrySet()) {
+        Map<String, List<String>> index = (type.equals("outline")) ? outlineIndex : textIndex;
+        for (Entry<String, List<String>> entry : index.entrySet()) {
             total = total + 1;
             currentChunk.put(entry.getKey(), entry.getValue());
             if (total > INDEX_LIMIT_SIZE) {
@@ -502,10 +542,13 @@ public class MigrationApp
                 currentChunk = new HashMap<String,List<String>>();
             }
         }
-        if (!type.equals("item")) {
-            dumpMapInFile(currentChunk, type+"Index-"+i+".json");
-        }
+        dumpMapInFile(currentChunk, type+"Index-"+i+".json");
         textIndex = new HashMap<String, List<String>>();
+    }
+    
+    public static void migrateOneDir(File dir, String type) {
+        File[] files = dir.listFiles();
+        Stream.of(files).forEach(file -> migrateOneFile(file, type));
     }
     
     public static void migrateType(String type) {
@@ -513,22 +556,26 @@ public class MigrationApp
         createDirIfNotExists(OUTPUT_DIR+type+"s");
         String dirName = DATA_DIR+type+"s";
         File[] files = new File(dirName).listFiles();
-        System.out.println("converting "+files.length+" "+type+" files");
+        //System.out.println("converting "+files.length+" "+type+" files");
         //Stream.of(files).parallel().forEach(file -> migrateOneFile(file, type));
-        Stream.of(files).forEach(file -> migrateOneFile(file, type));
-        dumpIndex(type);
+        Stream.of(files).forEach(file -> migrateOneDir(file, type));
+        if (!type.equals("item"))
+            dumpIndex(type);
+        if (type.equals("work"))
+            dumpIndex("outline");
     }
 
     public static void main( String[] args )
     {
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
-//        migrateType("item");
-//        migrateType("work");
-//        migrateType("person");
-        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/items/4d/I12827_I001.ttl"), "item");
-        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/works/d3/W12827.ttl"), "work");
-        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/persons/fa/P1583.ttl"), "person");
+        migrateType("item");
+        migrateType("work");
+        migrateType("person");
+//        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/items/4d/I12827_I001.ttl"), "item");
+//        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/works/d3/W12827.ttl"), "work");
+//        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/persons/fa/P1583.ttl"), "person");
+//        dumpIndex("test");
         System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
         try {
             om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
