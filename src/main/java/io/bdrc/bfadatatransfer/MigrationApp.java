@@ -27,6 +27,8 @@ import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RiotException;
+import org.apache.jena.vocabulary.RDF;
+import org.apache.jena.vocabulary.RDFS;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -43,35 +45,41 @@ public class MigrationApp
         String mappedProp;
         boolean inArray;
         boolean isObjectProp;
+        boolean isSimpleObjectProp;
         boolean toIndex;
 
-        public PropInfo(String mappedProp, boolean inArray, boolean isObjectProp, boolean toIndex)
+        public PropInfo(String mappedProp, boolean inArray, boolean isObjectProp, boolean isSimpleObjectProp, boolean toIndex)
         {
             this.mappedProp = mappedProp;
             this.inArray = inArray;
             this.isObjectProp = isObjectProp;
+            this.isSimpleObjectProp = isSimpleObjectProp;
             this.toIndex = toIndex;
         }
     }
 
-    public static final String DESCRIPTION_PREFIX = "http://onto.bdrc.io/ontology/description#";
-    public static final String ROOT_PREFIX = "http://purl.bdrc.io/ontology/root#";
-    public static final String LINEAGE_PREFIX = "http://purl.bdrc.io/ontology/lineage#";
-    public static final String OFFICE_PREFIX = "http://purl.bdrc.io/ontology/office#";
-    public static final String OUTLINE_PREFIX = "http://purl.bdrc.io/ontology/outline#";
-    public static final String PERSON_PREFIX = "http://purl.bdrc.io/ontology/person#";
-    public static final String PLACE_PREFIX = "http://purl.bdrc.io/ontology/place#";
-    public static final String TOPIC_PREFIX = "http://purl.bdrc.io/ontology/topic#";
-    public static final String VOLUMES_PREFIX = "http://purl.bdrc.io/ontology/volumes#";
-    public static final String WORK_PREFIX = "http://purl.bdrc.io/ontology/work#";
+    public static final String ONTOLOGY_PREFIX = "http://purl.bdrc.io/ontology/core/";
+    public static final String ADMIN_PREFIX = "http://purl.bdrc.io/ontology/admin/";
+    public static final String DATA_PREFIX = "http://purl.bdrc.io/data/";
+    public static final String RESOURCE_PREFIX = "http://purl.bdrc.io/resource/";
+    public static final String SKOS_PREFIX = "http://www.w3.org/2004/02/skos/core#";
+    public static final String VCARD_PREFIX = "http://www.w3.org/2006/vcard/ns#";
+    public static final String TBR_PREFIX = "http://purl.bdrc.io/ontology/toberemoved/";
+    public static final String OWL_PREFIX = "http://www.w3.org/2002/07/owl#";
+    public static final String RDF_PREFIX = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     public static final String RDFS_PREFIX = "http://www.w3.org/2000/01/rdf-schema#";
+    public static final String XSD_PREFIX = "http://www.w3.org/2001/XMLSchema#";
+    
+    public static final String BDO = ONTOLOGY_PREFIX;
+    public static final String BDR = RESOURCE_PREFIX;
+    public static final String ADM = ADMIN_PREFIX;
     
     public static final int INDEX_LIMIT_SIZE = 10000;
     
     public static final EwtsConverter converter = new EwtsConverter();
 
     // extract tbrc/ folder of exist-db backup here:
-    public static final String DATA_DIR = "../xmltoldmigration/tbrc-jsonld/";
+    public static final String DATA_DIR = "../xmltoldmigration/tbrc-ttl/";
     public static final String OUTPUT_DIR = "tbrc-bfa/";
 
     public static Map<String, List<String>> textIndex = new TreeMap<String, List<String>>();
@@ -89,60 +97,32 @@ public class MigrationApp
     public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
 
     static {
-        propMapping.put("status", new PropInfo("status", false, false, false));
-        propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false, false));
-        propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false, false));
-        propMapping.put("bibliographicalTitle", new PropInfo("title", true, false, true));
-        propMapping.put("captionTitle", new PropInfo("title", true, false, true));
-        propMapping.put("colophonTitle", new PropInfo("title", true, false, false));
-        propMapping.put("copyrightPageTitle", new PropInfo("title", true, false, true));
-        propMapping.put("coverTitle", new PropInfo("title", true, false, true));
-        propMapping.put("dkarChagTitle", new PropInfo("title", true, false, true));
-        propMapping.put("fullTitle", new PropInfo("title", true, false, true));
-        propMapping.put("halfTitle", new PropInfo("title", true, false, true));
-        propMapping.put("incipit", new PropInfo("title", true, false, false));
-        propMapping.put("otherTitle", new PropInfo("title", true, false, true));
-        propMapping.put("runningTitle", new PropInfo("title", true, false, true));
-        propMapping.put("sectionTitle", new PropInfo("title", true, false, true));
-        propMapping.put("spineTitle", new PropInfo("title", true, false, true));
-        propMapping.put("titlePageTitle", new PropInfo("title", true, false, true));
-        propMapping.put("subtitle", new PropInfo("title", true, false, true));
-        propMapping.put("pubinfo_printType", new PropInfo("printType", false, false, false));
-        propMapping.put("pubinfo_publisherDate", new PropInfo("publisherDate", false, false, false));
-        propMapping.put("pubinfo_publisherName", new PropInfo("publisherName", false, false, false));
-        propMapping.put("pubinfo_publisherLocation", new PropInfo("publisherLocation", false, false, false));
-        propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true, false));
-        propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true, false));
-        propMapping.put("hasCreator", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasArtist", new PropInfo("hasArtist", true, true, false));
-        propMapping.put("hasAttributedAuthor", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasBard", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasCalligrapher", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasCommentator", new PropInfo("hasCreator", true, true, false)); // ?
-        propMapping.put("hasContributingAuthor", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasEditor", new PropInfo("hasCreator", true, true, false)); // ?
-        propMapping.put("hasMainAuthor", new PropInfo("hasCreator", true, true, false)); 
-        propMapping.put("hasPandita", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasScribe", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasTerton", new PropInfo("hasCreator", true, true, false));
-        propMapping.put("hasTranslator", new PropInfo("hasCreator", true, true, false)); // ?
-        propMapping.put("name", new PropInfo("name", true, false, true));
-        propMapping.put("bodhisattvaVowName", new PropInfo("name", true, false, true));
-        propMapping.put("commonName", new PropInfo("name", true, false, true));
-        propMapping.put("corporateName", new PropInfo("name", true, false, true));
-        propMapping.put("familyName", new PropInfo("name", true, false, true));
-        propMapping.put("finalOrdinationName", new PropInfo("name", true, false, true));
-        propMapping.put("fiestOrdinationName", new PropInfo("name", true, false, true));
-        propMapping.put("gTerStonTitle", new PropInfo("name", true, false, true));
-        propMapping.put("officeTitle", new PropInfo("name", true, false, true));
-        propMapping.put("otherName", new PropInfo("name", true, false, true));
-        propMapping.put("penName", new PropInfo("name", true, false, true));
-        propMapping.put("pesonalName", new PropInfo("name", true, false, true));
-        propMapping.put("personTitle", new PropInfo("name", true, false, true));
-        propMapping.put("primaryName", new PropInfo("name", true, false, true));
-        propMapping.put("primaryTitle", new PropInfo("name", true, false, true));
-        propMapping.put("tulkuTitle", new PropInfo("name", true, false, true));
-        propMapping.put("secretInitiatoryName", new PropInfo("name", true, false, true));
+        //propMapping.put("status", new PropInfo("status", false, false, false));
+        //propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false, false));
+        //propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false, false));
+        //propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true, false));
+        //propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true, false));
+        
+        propMapping.put("workIncipit", new PropInfo("title", true, false, false, false));
+        //propMapping.put("pubinfo_printType", new PropInfo("printType", false, false, false));
+        propMapping.put("workPublisherDate", new PropInfo("publisherDate", false, false, false, false));
+        propMapping.put("workPublisherName", new PropInfo("publisherName", false, false, false, false));
+        propMapping.put("workPublisherLocation", new PropInfo("publisherLocation", false, false, false, false));
+        propMapping.put("workCreator", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorArtist", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorAttributedAuthor", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorBard", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorCalligrapher", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorCommentator", new PropInfo("hasCreator", true, true, false, false)); // ?
+        propMapping.put("creatorContributingAuthor", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorEditor", new PropInfo("hasCreator", true, true, false, false)); // ?
+        propMapping.put("creatorMainAuthor", new PropInfo("hasCreator", true, true, false, false)); 
+        propMapping.put("creatorPandita", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorScribe", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorTerton", new PropInfo("hasCreator", true, true, false, false));
+        propMapping.put("creatorTranslator", new PropInfo("hasCreator", true, true, false, false)); // ?
+        propMapping.put("workTitle", new PropInfo("title", true, true, true, true));
+        propMapping.put("personName", new PropInfo("name", true, true, true, true));
     }
 
     public static void createDirIfNotExists(String dir) {
@@ -156,15 +136,6 @@ public class MigrationApp
                 System.err.println("could not create directory, please fasten your seat belt");
             }        
         }
-    }
-
-    public static String removePrefix(String uri) {
-        int i = uri.indexOf('#');
-        if (i < 0) {
-            i = uri.lastIndexOf('/');
-            return uri.substring(i+1);
-        }
-        return uri.substring(i+1);
     }
 
     public static void writeToIndex(String titleOrName, String id, String type) {
@@ -191,7 +162,7 @@ public class MigrationApp
         }
         Model model = ModelFactory.createDefaultModel();
         try {
-            model.read(fStream, null, "JSON-LD") ;
+            model.read(fStream, null, "TTL") ;
         } catch (RiotException e) {
             System.err.println(f.getAbsolutePath());
             e.printStackTrace();
@@ -201,16 +172,7 @@ public class MigrationApp
     }
 
     public static String getFullUrlFromBaseFileName(String baseName, String type) {
-        switch(type) {
-        case "work":
-            return WORK_PREFIX+baseName;
-        case "volume":
-            return VOLUMES_PREFIX+baseName;
-        case "person":
-            return PERSON_PREFIX+baseName;
-        default:
-            return OUTLINE_PREFIX+baseName;
-        }
+        return BDR+baseName;
     }
 
     public static void addAuthorMapping(String workId, String authorId) {
@@ -236,14 +198,11 @@ public class MigrationApp
     }
     
     public static void fillLocations(Model m, Resource r, ObjectNode rootNode) {
-        Property beginsAtProp = m.getProperty(OUTLINE_PREFIX+"beginsAt");
-        Property endsAtProp = m.getProperty(OUTLINE_PREFIX+"endsAt");
-        Property volumeProp = m.getProperty(WORK_PREFIX+"volume");
-        Property pageProp = m.getProperty(WORK_PREFIX+"page");
-        Statement s = r.getProperty(beginsAtProp);
+        Property locationProp = m.getProperty(BDO+"workLocation");
+        Statement s = r.getProperty(locationProp);
         if (s == null) return;
         Resource location = s.getResource();
-        Statement pageStatement = location.getProperty(pageProp);
+        Statement pageStatement = location.getProperty(m.getProperty(BDO, "workLocationPage"));
         if (pageStatement == null) return;
         int beginPage = 0;
         try {
@@ -253,18 +212,16 @@ public class MigrationApp
             //System.err.println(e.getMessage());
             return;
         }
-        Statement volumeStatement = location.getProperty(volumeProp);
+        Statement volumeStatement = location.getProperty(m.getProperty(BDO, "workLocationVolume"));
         if (volumeStatement == null) return;
         int volume;
         try {
             volume = volumeStatement.getInt();
         } catch (Exception e) {
+            //System.err.println(volumeStatement);
             return;
         }
-        s = r.getProperty(endsAtProp);
-        if (s == null) return;
-        location = s.getResource();
-        pageStatement = location.getProperty(pageProp);
+        pageStatement = location.getProperty(m.getProperty(BDO, "workLocationEndPage"));
         if (pageStatement == null) return;
         int endPage;
         try {
@@ -274,13 +231,16 @@ public class MigrationApp
             //System.err.println(e.getMessage());
             return;
         }
-        volumeStatement = location.getProperty(volumeProp);
-        if (volumeStatement == null) return;
+        volumeStatement = location.getProperty(m.getProperty(BDO, "workLocationEndVolume"));
         int volumeEnd;
-        try {
-            volumeEnd = volumeStatement.getInt();
-        } catch (Exception e) {
-            return;
+        if (volumeStatement == null) {
+            volumeEnd = volume;
+        } else {
+            try {
+                volumeEnd = volumeStatement.getInt();
+            } catch (Exception e) {
+                return;
+            }
         }
         if (volumeEnd != volume) {
         //    System.err.println("at node "+r+" : cross volume locations");
@@ -293,7 +253,7 @@ public class MigrationApp
 
     public static void fillTreeProperties(Model m, Resource r, ObjectNode rootNode, String type, String baseName, String rootBaseName) {
         if (type.equals("person")) {
-            String queryString = "PREFIX per: <"+PERSON_PREFIX+">\n"
+            String queryString = "PREFIX bdo: <"+BDO+">\n"
                     + "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
                     + "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
                     + "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\n"
@@ -301,12 +261,12 @@ public class MigrationApp
                     + "SELECT ?eventType ?circa\n"
                     + "WHERE {\n"
                     + "  {\n"
-                    + "     ?b rdf:type per:Death .\n"
-                    + "     ?b per:event_circa ?circa .\n"
+                    + "     ?b rdf:type bdo:PersonEventDeath .\n"
+                    + "     ?b bdo:onOrAbout ?circa .\n"
                     + "     BIND (\"death\" AS ?eventType)\n"
                     + "  } UNION {\n"
-                    + "     ?b rdf:type per:Birth .\n"
-                    + "     ?b per:event_circa ?circa .\n"
+                    + "     ?b rdf:type bdo:PersonEventBirth .\n"
+                    + "     ?b bdo:onOrAbout ?circa .\n"
                     + "     BIND (\"birth\" AS ?eventType)\n"
                     + "  }\n"
                     + "}\n" ;
@@ -320,13 +280,13 @@ public class MigrationApp
                 rootNode.put(eventType, circaString);
               }
             }
-        } else if (type.equals("outline")) {
-            Property p = m.getProperty(OUTLINE_PREFIX+"hasNode");
+        } else if (type.equals("work")) {
+            Property p = m.getProperty(BDO, "workHasPart");
             StmtIterator propIter = r.listProperties(p);
             while(propIter.hasNext()) {
                 Statement s = propIter.nextStatement();
                 Resource o = s.getResource();
-                String oid = removePrefix(o.getURI());
+                String oid = o.getProperty(m.getProperty(ADM, "workLegacyNode")).getString();
                 ArrayNode a = (ArrayNode) rootNode.get("nodes");
                 if (a == null) {
                     a = om.createArrayNode();
@@ -350,7 +310,7 @@ public class MigrationApp
     
     public static String getLabel(Model m, Resource r) {
         String res = null;
-        Property p = m.getProperty(RDFS_PREFIX+"label");
+        Property p = m.getProperty(SKOS_PREFIX+"prefLabel");
         StmtIterator propIter = r.listProperties(p);
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
@@ -362,47 +322,54 @@ public class MigrationApp
         }
         return res;
     }
+
+    public static String getStatus(Model m, Resource r) {
+        Property p = m.getProperty(ADM+"status");
+        StmtIterator propIter = r.listProperties(p);
+        while(propIter.hasNext()) {
+            Statement s = propIter.nextStatement();
+            return s.getResource().getLocalName(); // TODO: mapping?
+        }
+        return "";
+    }
     
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         String label = null;
-        if (type.equals("person") || type.equals("work")) {
-            label = getLabel(m, r);
-            writeToIndex(label, rootName, type);
-            addToOutput(currentNode, new PropInfo((type == "person" ? "name" : "title"), true, false, true), label);
-            if (type.equals("work")) {
-                String outlineId = workOutlineIdMap.get(rootName);
-                if (outlineId != null) {
-                    outlineWorkTitleMap.put(outlineId, label);
-                }
-            }
-        }
         StmtIterator propIter = r.listProperties();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
             Property p = s.getPredicate();
-            String pBaseName = removePrefix(p.getURI());
+            String pBaseName = p.getLocalName();
             //System.out.println(pBaseName);
             PropInfo pInfo = propMapping.get(pBaseName);
             if (pInfo == null) continue;
             if (pInfo.isObjectProp) {
                 Resource o = s.getResource();
-                String oid = removePrefix(o.getURI());
-                addToOutput(currentNode, pInfo, oid);
-                if (pInfo.mappedProp.equals("hasCreator")) {
-                    addAuthorMapping(rName, oid);
-                }
-                if (pInfo.mappedProp.equals("isOutlineOf")) {
-                    workOutlineIdMap.put(oid, rootName);
+                if (pInfo.isSimpleObjectProp) {
+                    Literal l = o.getProperty(RDFS.label).getLiteral();
+                    String lang = l.getLanguage();
+                    if (lang.equals("bo")) {
+                        addToOutput(currentNode, pInfo, l.getString());
+                    } else if (lang.equals("bo-x-ewts")) {
+                        String uniString = converter.toUnicode(l.getString());
+                        addToOutput(currentNode, pInfo, uniString);
+                    }
+                } else {
+                    String oid = o.getLocalName();
+                    addToOutput(currentNode, pInfo, oid);
+                    if (pInfo.mappedProp.equals("hasCreator")) {
+                        addAuthorMapping(rName, oid);
+                    }
                 }
             } else {
-                if (type.equals("outline") && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
-                    // not interested in outline's main title, should be the same as the work
-                    continue;
-                }
-                if (type.equals("outline") && pInfo.mappedProp.equals("name")) {
-                    // not interested in outline names, just titles
-                    continue;
-                }
+//                if (type.equals("outline") && rootName.equals(rName) /* && (pInfo.mappedProp.equals("name") || pInfo.mappedProp.equals("title"))*/) {
+//                    // not interested in outline's main title, should be the same as the work
+//                    continue;
+//                }
+//                if (type.equals("outline") && pInfo.mappedProp.equals("name")) {
+//                    // not interested in outline names, just titles
+//                    continue;
+//                }
                 if (!type.equals("work") && pInfo.mappedProp.equals("status")) {
                     // only interested in work status
                     continue;
@@ -410,7 +377,7 @@ public class MigrationApp
                 Literal l = s.getLiteral();
                 // TODO: handle non-strings?
                 String lang = l.getLanguage();
-                if (lang.isEmpty()) {
+                if (lang.isEmpty() || (lang.equals("en") && (pInfo.mappedProp.equals("publisherName")||(pInfo.mappedProp.equals("publisherLocation"))))) {
                     addToOutput(currentNode, pInfo, l.getString());
                 } else if (lang.equals("bo-x-ewts")) {
                     String uniString = converter.toUnicode(l.getString());
@@ -424,7 +391,7 @@ public class MigrationApp
                             writeToIndex(uniString, rootName, type);
                     }
                     addToOutput(currentNode, pInfo, uniString);
-                    if (type == "outline") break; // just one title per outline
+                    //if (type == "outline") break; // just one title per outline
                 }
             }
         }
@@ -432,20 +399,21 @@ public class MigrationApp
     }
     
     private static void fillVolumes(Model m, Resource r, String mainResourceName) {
-        String volumesId = removePrefix(r.getURI());
+        String volumesId = r.getLocalName();
         String workId = 'W'+volumesId.substring(1);
-        Property p = m.getProperty(VOLUMES_PREFIX+"hasVolume");
+        workId = workId.substring(0, workId.indexOf('_'));
+        System.out.println(workId);
+        Property p = m.getProperty(BDO, "itemHasVolume");
         StmtIterator propIter = r.listProperties(p);
         ArrayNode volumesNode = om.createArrayNode();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
             Resource o = s.getResource();
-            String oid = removePrefix(o.getURI());
-            String imageGroupId = oid.substring(oid.lastIndexOf("_") + 1);
+            String imageGroupId = o.getProperty(m.getProperty(ADM, "legacyImageGroupRID")).getString();
             ObjectNode volumeNode = om.createObjectNode();
             volumeNode.put("id", imageGroupId);
-            int volnum = o.getProperty(m.getProperty(VOLUMES_PREFIX+"number")).getInt();
-            Statement totalPag = o.getProperty(m.getProperty(VOLUMES_PREFIX+"pages_total"));
+            int volnum = o.getProperty(m.getProperty(BDO, "volumeNumber")).getInt();
+            Statement totalPag = o.getProperty(m.getProperty(BDO, "imageCount"));
             if (totalPag != null) {
                 int totalPagInt = totalPag.getInt();
                 volumeNode.put("total", totalPagInt);
@@ -461,8 +429,9 @@ public class MigrationApp
     public static void migrateOneFile(File file, String type) {
         if (file.isDirectory()) return;
         String fileName = file.getName();
-        if (!fileName.endsWith(".jsonld")) return;
-        String baseName = fileName.substring(0, fileName.length()-7);
+        if (!fileName.endsWith(".ttl")) return;
+        if (type.equals("item") && !fileName.contains("_I")) return;
+        String baseName = fileName.substring(0, fileName.length()-4);
         ObjectNode output = om.createObjectNode();
         String outfileName = baseName+".json";
         outfileName = OUTPUT_DIR+type+"s/"+outfileName;
@@ -477,7 +446,12 @@ public class MigrationApp
             System.err.println("unable to find resource "+mainResourceName);
             return;
         }
-        if (type.equals("volume")) {
+        if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return;
+        if (type.equals("work") || type.equals("outline")) {
+            String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName();
+            if (access.equals("AccessRestrictedInChina")) return;
+        }
+        if (type.equals("item")) {
             fillVolumes(m, mainR, mainResourceName);
             return;
         }
@@ -493,7 +467,7 @@ public class MigrationApp
                 output.set("volumeMap", volumesNode);
             }
         }
-        if (type.equals("outline")) {
+        if (type.equals("work")) {
             nodeList = new ArrayList<String>();
         }
         fillResourceInNode(m, mainR, baseName, output, output, baseName, type);
@@ -528,7 +502,7 @@ public class MigrationApp
                 currentChunk = new HashMap<String,List<String>>();
             }
         }
-        if (!type.equals("volume")) {
+        if (!type.equals("item")) {
             dumpMapInFile(currentChunk, type+"Index-"+i+".json");
         }
         textIndex = new HashMap<String, List<String>>();
@@ -549,21 +523,18 @@ public class MigrationApp
     {
         createDirIfNotExists(OUTPUT_DIR);
         long startTime = System.currentTimeMillis();
-        migrateType("outline");
-        migrateType("volume");
-        migrateType("work");
-        migrateType("person");
+//        migrateType("item");
+//        migrateType("work");
+//        migrateType("person");
+        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/items/4d/I12827_I001.ttl"), "item");
+        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/works/d3/W12827.ttl"), "work");
+        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/persons/fa/P1583.ttl"), "person");
         System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
         try {
             om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        //migrateOneFile(new File("src/test/resources/W12827.jsonld"), "work");
-//        migrateOneFile(new File("test.jsonld"), "outline");
-        //migrateOneFile(new File("src/test/resources/P1583.jsonld"), "person");
-        //migrateOneFile(new File("src/test/resources/O2DB87572.jsonld"), "outline");
-        //  migrateOneFile(new File("O1LS2931.jsonld"), "outline");
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
