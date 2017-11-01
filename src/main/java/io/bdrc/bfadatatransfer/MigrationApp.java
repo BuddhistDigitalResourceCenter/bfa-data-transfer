@@ -446,6 +446,8 @@ public class MigrationApp
         if (file.isDirectory()) return;
         String fileName = file.getName();
         if (!fileName.endsWith(".ttl")) return;
+        if (fileName.contains("TLM")) return; // no TLM things
+        if (fileName.contains("FPL")) return; // no FPL works (yet)
         if (type.equals("item") && !fileName.contains("_I")) return;
         String baseName = fileName.substring(0, fileName.length()-4);
         ObjectNode output = om.createObjectNode();
@@ -462,8 +464,13 @@ public class MigrationApp
             System.err.println("unable to find resource "+mainResourceName);
             return;
         }
-        if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return;
+        //if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return; // we keep non-released works
         if (type.equals("work") || type.equals("outline")) {
+            Resource accessR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
+            if (accessR == null) {
+                System.err.println("no access property on "+mainResourceName);
+                return;
+            }
             String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName();
             if (access.equals("AccessRestrictedInChina")) return;
         }
@@ -568,6 +575,7 @@ public class MigrationApp
     public static void main( String[] args )
     {
         createDirIfNotExists(OUTPUT_DIR);
+        createDirIfNotExists(OUTPUT_DIR+"outlines");
         long startTime = System.currentTimeMillis();
         migrateType("item");
         migrateType("work");
