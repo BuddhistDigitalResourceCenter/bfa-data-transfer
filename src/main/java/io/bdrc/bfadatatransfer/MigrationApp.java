@@ -1,10 +1,12 @@
 package io.bdrc.bfadatatransfer;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +72,13 @@ public class MigrationApp
     public static final String RDFS_PREFIX = "http://www.w3.org/2000/01/rdf-schema#";
     public static final String XSD_PREFIX = "http://www.w3.org/2001/XMLSchema#";
     
+    public static final int RESTRICTED_CHINA = 0;
+    public static final int RESTRICTED_TBRC = 1;
+    public static final int RESTRICTED_QUALITY = 2;
+    public static final int RESTRICTED_SEALED = 3;
+    public static final int RESTRICTED_OPEN = 4;
+    public static final int RESTRICTED_FAIRUSE = 5;
+    
     public static final String BDO = ONTOLOGY_PREFIX;
     public static final String BDR = RESOURCE_PREFIX;
     public static final String ADM = ADMIN_PREFIX;
@@ -96,14 +105,14 @@ public class MigrationApp
     public static final ObjectMapper om = new ObjectMapper();
 
     public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
+    
+    public static final Map<String, Integer> newRestrictions = new HashMap<>(); 
 
     static {
-        //propMapping.put("status", new PropInfo("status", false, false, false));
-        //propMapping.put("archiveInfo_status", new PropInfo("archiveInfo_status", false, false, false));
-        //propMapping.put("archiveInfo_vols", new PropInfo("archiveInfo_vols", false, false, false));
-        //propMapping.put("outlinedBy", new PropInfo("outlinedBy", false, true, false));
-        //propMapping.put("isOutlineOf", new PropInfo("isOutlineOf", false, true, false));
-        
+        init();
+    }
+
+    public static void init() {
         propMapping.put("workIncipit", new PropInfo("title", true, false, false, false));
         //propMapping.put("pubinfo_printType", new PropInfo("printType", false, false, false));
         propMapping.put("workPublisherDate", new PropInfo("publisherDate", false, false, false, false));
@@ -124,8 +133,49 @@ public class MigrationApp
         propMapping.put("creatorTranslator", new PropInfo("hasCreator", true, true, false, false)); // ?
         propMapping.put("workTitle", new PropInfo("title", true, true, true, true));
         propMapping.put("personName", new PropInfo("name", true, true, true, true));
+        File newRestrictionsFile = new File("allworks.csv");
+        FileInputStream fis;
+        try {
+            fis = new FileInputStream(newRestrictionsFile);
+        } catch (FileNotFoundException e1) {
+            e1.printStackTrace();
+            return;
+        }
+        
+        //Construct BufferedReader from InputStreamReader
+        BufferedReader br = new BufferedReader(new InputStreamReader(fis));
+     
+        String line = null;
+        try {
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(",");
+                switch(parts[1]) {
+                case "FairUse":
+                    newRestrictions.put(parts[0], RESTRICTED_FAIRUSE);
+                    break;
+                case "RestrictedByQuality":
+                    newRestrictions.put(parts[0], RESTRICTED_QUALITY);
+                    break;
+                case "RestrictedByTbrc":
+                    newRestrictions.put(parts[0], RESTRICTED_TBRC);
+                    break;
+                case "RestrictedInChina":
+                    newRestrictions.put(parts[0], RESTRICTED_CHINA);
+                    break;
+                case "RestrictedSealed":
+                    newRestrictions.put(parts[0], RESTRICTED_SEALED);
+                    break;
+                case "Open":
+                    newRestrictions.put(parts[0], RESTRICTED_OPEN);
+                    break;
+                }
+            }
+            br.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
-
+    
     public static void createDirIfNotExists(String dir) {
         File theDir = new File(dir);
         if (!theDir.exists()) {
