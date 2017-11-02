@@ -500,6 +500,7 @@ public class MigrationApp
         if (fileName.contains("FPL")) return; // no FPL works (yet)
         if (type.equals("item") && !fileName.contains("_I")) return;
         String baseName = fileName.substring(0, fileName.length()-4);
+        if (newRestrictions.containsKey(baseName)) return;
         ObjectNode output = om.createObjectNode();
         String outfileName = baseName+".json";
         outfileName = OUTPUT_DIR+type+"s/"+outfileName;
@@ -514,7 +515,7 @@ public class MigrationApp
             System.err.println("unable to find resource "+mainResourceName);
             return;
         }
-        //if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return; // we keep non-released works
+        if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return; // we keep non-released works?
         if (type.equals("work") || type.equals("outline")) {
             Resource accessR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
             if (accessR == null) {
@@ -522,7 +523,7 @@ public class MigrationApp
                 return;
             }
             String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName();
-            if (access.equals("AccessRestrictedInChina")) return;
+            if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
         }
         if (type.equals("item")) {
             fillVolumes(m, mainR, mainResourceName);
@@ -634,12 +635,12 @@ public class MigrationApp
 //        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/works/d3/W12827.ttl"), "work");
 //        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/persons/fa/P1583.ttl"), "person");
 //        dumpIndex("test");
-        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
-        try {
-            om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
+//        try {
+//            om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
