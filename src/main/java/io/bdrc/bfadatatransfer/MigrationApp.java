@@ -360,6 +360,36 @@ public class MigrationApp
         }
     }
     
+    public static String addFinalShad(String s) {
+        if (s == null)
+            return s;
+        final int sLen = s.length();
+        final int last = s.codePointAt(sLen-1);
+        if (sLen > 1 && (last == 0x0F0B || last == 0x0F0C)) { // case of "nga ", "ngo ", etc.
+            final int beforeLast = s.codePointAt(sLen-2);
+            if (beforeLast == 0x0F44)
+                return s+'།';
+            if (sLen > 2 && (beforeLast == 0x0F7A || beforeLast == 0x0F72 || beforeLast == 0x0F7C)) {
+                final int beforeBeforeLast = s.codePointAt(s.length()-3);
+                if (beforeBeforeLast == 0x0F44)
+                    return s+'།';
+            }
+            return s;
+        }
+        if (last < 0x0F41 || last > 0x0FBC || last == 0x0F42 || last == 0x0F64)  // string doesn't end with tibetan letter or ends with ka, ga or sha
+            return s;
+        if (last == 0x0F44)
+            return s+"་།";
+        if (sLen > 1 && (last == 0x0F7A || last == 0x0F72 || last == 0x0F7C)) { // inspect if last is ki, gi, shi, etc.
+            final int beforeLast = s.codePointAt(sLen-2);
+            if (beforeLast == 0x0F40 || beforeLast == 0x0F42 || beforeLast == 0x0F64)
+                return s;
+            if (beforeLast == 0x0F44)
+                return s+"་།";
+        }
+        return s+'།'; // general case
+    }
+    
     public static String getLabel(Model m, Resource r) {
         String res = null;
         Property p = m.getProperty(SKOS_PREFIX+"prefLabel");
@@ -369,7 +399,7 @@ public class MigrationApp
             Literal l = s.getLiteral();
             String lang = l.getLanguage();
             if (lang.equals("bo-x-ewts")) {
-                return converter.toUnicode(l.getString());
+                return addFinalShad(converter.toUnicode(l.getString()));
             }
         }
         return res;
@@ -408,7 +438,7 @@ public class MigrationApp
                     String lang = l.getLanguage();
                     String ls = l.getString();
                     if (lang.equals("bo-x-ewts"))
-                        ls = converter.toUnicode(ls);
+                        ls = addFinalShad(converter.toUnicode(ls));
                     else if (!lang.equals("bo"))
                         continue;
                     addToOutput(currentNode, pInfo, ls);
@@ -444,7 +474,7 @@ public class MigrationApp
                 if (lang.isEmpty() || (lang.equals("en") && (pInfo.mappedProp.equals("publisherName")||(pInfo.mappedProp.equals("publisherLocation"))))) {
                     addToOutput(currentNode, pInfo, l.getString());
                 } else if (lang.equals("bo-x-ewts")) {
-                    String uniString = converter.toUnicode(l.getString());
+                    String uniString = addFinalShad(converter.toUnicode(l.getString()));
                     if (label != null && label.equals(uniString)) {
                         continue;
                     }
@@ -628,6 +658,15 @@ public class MigrationApp
         createDirIfNotExists(OUTPUT_DIR);
         createDirIfNotExists(OUTPUT_DIR+"outlines");
         long startTime = System.currentTimeMillis();
+//        System.out.println("བླ་མ -> "+addFinalShad("བླ་མ"));
+//        System.out.println("ངོ་ -> "+addFinalShad("ངོ་"));
+//        System.out.println("ང་ -> "+addFinalShad("ང་"));
+//        System.out.println("ངོ -> "+addFinalShad("ངོ"));
+//        System.out.println("ང -> "+addFinalShad("ང"));
+//        System.out.println("ངག -> "+addFinalShad("ངག"));
+//        System.out.println("གི -> "+addFinalShad("གི"));
+//        System.out.println("ཤེ -> "+addFinalShad("ཤེ"));
+//        System.out.println("ཀོ -> "+addFinalShad("ཀོ"));
         migrateType("item");
         migrateType("work");
         migrateType("person");
