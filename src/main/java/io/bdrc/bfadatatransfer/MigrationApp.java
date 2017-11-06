@@ -416,7 +416,7 @@ public class MigrationApp
     }
     
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
-        String label = null;
+        String label = getLabel(m, r);
         StmtIterator propIter = r.listProperties();
         String outlineId = null;
         while(propIter.hasNext()) {
@@ -475,9 +475,6 @@ public class MigrationApp
                     addToOutput(currentNode, pInfo, l.getString());
                 } else if (lang.equals("bo-x-ewts")) {
                     String uniString = addFinalShad(converter.toUnicode(l.getString()));
-                    if (label != null && label.equals(uniString)) {
-                        continue;
-                    }
                     if (pInfo.toIndex) {
                         if (!rName.equals(rootName))
                             writeToIndex(uniString, rootName+'-'+rName, "outline");
@@ -491,6 +488,7 @@ public class MigrationApp
         }
         if (outlineId != null) {
             rootName = outlineId;
+            outlineWorkTitleMap.put(outlineId, label);
         }
         fillTreeProperties(m, r, rootNode, type, rName, rootName);
     }
@@ -674,12 +672,12 @@ public class MigrationApp
 //        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/works/d3/W12827.ttl"), "work");
 //        migrateOneFile(new File("../xmltoldmigration/tbrc-ttl/persons/fa/P1583.ttl"), "person");
 //        dumpIndex("test");
-//        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
-//        try {
-//            om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
+        System.out.println("dumping "+outlineWorkTitleMap.size()+" entries to outlineWorkTitle.json");
+        try {
+            om.writeValue(new File(OUTPUT_DIR+"outlineWorkTitle.json"), outlineWorkTitleMap);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
