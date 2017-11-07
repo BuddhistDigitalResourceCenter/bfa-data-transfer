@@ -434,19 +434,23 @@ public class MigrationApp
             if (pInfo.isObjectProp) {
                 Resource o = s.getResource();
                 if (pInfo.isSimpleObjectProp) {
-                    Literal l = o.getProperty(RDFS.label).getLiteral();
-                    String lang = l.getLanguage();
-                    String ls = l.getString();
-                    if (lang.equals("bo-x-ewts"))
-                        ls = addFinalShad(converter.toUnicode(ls));
-                    else if (!lang.equals("bo"))
-                        continue;
-                    addToOutput(currentNode, pInfo, ls);
-                    if (pInfo.toIndex) {
-                        if (!rName.equals(rootName))
-                            writeToIndex(ls, rootName+'-'+rName, "outline");
-                        else
-                            writeToIndex(ls, rootName, type);
+                    StmtIterator labelIter = o.listProperties(RDFS.label);
+                    while(labelIter.hasNext()) {
+                        Statement labelStatement = labelIter.nextStatement();
+                        Literal l = labelStatement.getLiteral();
+                        String lang = l.getLanguage();
+                        String ls = l.getString();
+                        if (lang.equals("bo-x-ewts"))
+                            ls = addFinalShad(converter.toUnicode(ls));
+                        else if (!lang.equals("bo"))
+                            continue;
+                        addToOutput(currentNode, pInfo, ls);
+                        if (pInfo.toIndex) {
+                            if (!rName.equals(rootName))
+                                writeToIndex(ls, rootName+'-'+rName, "outline");
+                            else
+                                writeToIndex(ls, rootName, type);
+                        }
                     }
                 } else {
                     String oid = o.getLocalName();
