@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -243,7 +245,8 @@ public class MigrationApp
                 a = om.createArrayNode();
                 output.set(pInfo.mappedProp, a);
             }
-            a.add(value);
+            if (!a.has(value))
+                a.add(value);
         } else {
             output.put(pInfo.mappedProp, value);
         }
@@ -417,6 +420,9 @@ public class MigrationApp
     
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         String label = getLabel(m, r);
+        if (type.equals("person")) {
+            addToOutput(currentNode, new PropInfo("name", true, true, true, true), label);
+        }
         StmtIterator propIter = r.listProperties();
         String outlineId = null;
         while(propIter.hasNext()) {
@@ -497,6 +503,13 @@ public class MigrationApp
         fillTreeProperties(m, r, rootNode, type, rName, rootName);
     }
     
+    static final Comparator<ObjectNode> VOLUMES_COMP = 
+            new Comparator<ObjectNode>() {
+        public int compare(ObjectNode e1, ObjectNode e2) {
+            return e1.get("num").asInt() - e2.get("num").asInt();
+        }
+    };
+    
     private static void fillVolumes(Model m, Resource r, String mainResourceName) {
         String volumesId = r.getLocalName();
         String workId = 'W'+volumesId.substring(1);
@@ -504,6 +517,7 @@ public class MigrationApp
         Property p = m.getProperty(BDO, "itemHasVolume");
         StmtIterator propIter = r.listProperties(p);
         ArrayNode volumesNode = om.createArrayNode();
+        List<ObjectNode> volumes = new ArrayList<>();
         while(propIter.hasNext()) {
             Statement s = propIter.nextStatement();
             Resource o = s.getResource();
@@ -516,10 +530,12 @@ public class MigrationApp
                 int totalPagInt = totalPag.getInt();
                 volumeNode.put("total", totalPagInt);
                 volumeNode.put("num", volnum);
-                volumesNode.add(volumeNode);
+                volumes.add(volumeNode);
             }
         }
-        if (volumesNode.size() > 0) {
+        if (volumes.size() > 0) {
+            Collections.sort(volumes, VOLUMES_COMP);
+            volumesNode.addAll(volumes);
             workVolumesMap.put(workId, volumesNode);
         }
     }
@@ -554,8 +570,18 @@ public class MigrationApp
                 System.err.println("no access property on "+mainResourceName);
                 return;
             }
-            String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName();
-            if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
+            String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName().substring(6).toLowerCase();
+            //if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
+            if (access.equals("restrictedinchina")) return;
+            output.put("access", access);
+            Resource licenseR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
+            if (licenseR == null) {
+                System.err.println("no access property on "+mainResourceName);
+                return;
+            }
+            String license = mainR.getPropertyResourceValue(m.getProperty(ADM, "license")).getLocalName().substring(7).toLowerCase();
+            //if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
+            output.put("license", license);
         }
         if (type.equals("item")) {
             fillVolumes(m, mainR, mainResourceName);
