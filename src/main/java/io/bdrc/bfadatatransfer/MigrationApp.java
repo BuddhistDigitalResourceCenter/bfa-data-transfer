@@ -1,12 +1,10 @@
 package io.bdrc.bfadatatransfer;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -31,7 +29,6 @@ import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RiotException;
-import org.apache.jena.vocabulary.RDF;
 import org.apache.jena.vocabulary.RDFS;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -107,8 +104,6 @@ public class MigrationApp
     public static final ObjectMapper om = new ObjectMapper();
 
     public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
-    
-    public static final Map<String, Integer> newRestrictions = new HashMap<>(); 
 
     static {
         init();
@@ -135,47 +130,6 @@ public class MigrationApp
         propMapping.put("creatorTranslator", new PropInfo("hasCreator", true, true, false, false)); // ?
         propMapping.put("workTitle", new PropInfo("title", true, true, true, true));
         propMapping.put("personName", new PropInfo("name", true, true, true, true));
-        File newRestrictionsFile = new File("allworks.csv");
-        FileInputStream fis;
-        try {
-            fis = new FileInputStream(newRestrictionsFile);
-        } catch (FileNotFoundException e1) {
-            e1.printStackTrace();
-            return;
-        }
-        
-        //Construct BufferedReader from InputStreamReader
-        BufferedReader br = new BufferedReader(new InputStreamReader(fis));
-     
-        String line = null;
-        try {
-            while ((line = br.readLine()) != null) {
-                String[] parts = line.split(",");
-                switch(parts[1]) {
-                case "FairUse":
-                    newRestrictions.put(parts[0], RESTRICTED_FAIRUSE);
-                    break;
-                case "RestrictedByQuality":
-                    newRestrictions.put(parts[0], RESTRICTED_QUALITY);
-                    break;
-                case "RestrictedByTbrc":
-                    newRestrictions.put(parts[0], RESTRICTED_TBRC);
-                    break;
-                case "RestrictedInChina":
-                    newRestrictions.put(parts[0], RESTRICTED_CHINA);
-                    break;
-                case "RestrictedSealed":
-                    newRestrictions.put(parts[0], RESTRICTED_SEALED);
-                    break;
-                case "Open":
-                    newRestrictions.put(parts[0], RESTRICTED_OPEN);
-                    break;
-                }
-            }
-            br.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
     
     public static void createDirIfNotExists(String dir) {
@@ -245,7 +199,7 @@ public class MigrationApp
                 a = om.createArrayNode();
                 output.set(pInfo.mappedProp, a);
             }
-            if (!a.has(value))
+            if (a.size() < 1 || !a.get(0).asText().equals(value))
                 a.add(value);
         } else {
             output.put(pInfo.mappedProp, value);
@@ -548,7 +502,7 @@ public class MigrationApp
         if (fileName.contains("FPL")) return; // no FPL works (yet)
         if (type.equals("item") && !fileName.contains("_I")) return;
         String baseName = fileName.substring(0, fileName.length()-4);
-        if (newRestrictions.containsKey(baseName)) return;
+        //if (newRestrictions.containsKey(baseName)) return;
         ObjectNode output = om.createObjectNode();
         String outfileName = baseName+".json";
         outfileName = OUTPUT_DIR+type+"s/"+outfileName;
