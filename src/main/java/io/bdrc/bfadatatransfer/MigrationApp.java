@@ -519,15 +519,6 @@ public class MigrationApp
         }
         if (!type.equals("item") && !getStatus(m, mainR).equals("StatusReleased")) return; // we keep non-released works?
         if (type.equals("work") || type.equals("outline")) {
-            Resource accessR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
-            if (accessR == null) {
-                System.err.println("no access property on "+mainResourceName);
-                return;
-            }
-            String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName().substring(6).toLowerCase();
-            //if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
-            if (access.equals("restrictedinchina")) return;
-            output.put("access", access);
             Resource licenseR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
             if (licenseR == null) {
                 System.err.println("no access property on "+mainResourceName);
@@ -536,6 +527,17 @@ public class MigrationApp
             String license = mainR.getPropertyResourceValue(m.getProperty(ADM, "license")).getLocalName().substring(7).toLowerCase();
             //if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
             output.put("license", license);
+            Resource accessR = mainR.getPropertyResourceValue(m.getProperty(ADM, "access"));
+            if (accessR == null) {
+                System.err.println("no access property on "+mainResourceName);
+                return;
+            }
+            String access = mainR.getPropertyResourceValue(m.getProperty(ADM, "access")).getLocalName().substring(6).toLowerCase();
+            //if ((!access.equals("AccessOpen")) && !access.equals("AccessFairUse")) return;
+            if (access.equals("restrictedinchina")) return;
+            if (access.equals("open") && license.equals("copyrighted"))
+                access = "fairuse";
+            output.put("access", access);
         }
         if (type.equals("item")) {
             fillVolumes(m, mainR, mainResourceName);
