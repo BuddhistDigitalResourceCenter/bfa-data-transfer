@@ -3,8 +3,11 @@ package io.bdrc.bfadatatransfer;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -103,7 +106,9 @@ public class MigrationApp
 
     public static final ObjectMapper om = new ObjectMapper();
 
-    public static final Map<String, PropInfo> propMapping = new HashMap<String,PropInfo>();
+    public static final Map<String, PropInfo> propMapping = new HashMap<>();
+    
+    public static Map<String,String> personnames;
 
     static {
         init();
@@ -130,6 +135,26 @@ public class MigrationApp
         propMapping.put("creatorTranslator", new PropInfo("hasCreator", true, true, false, false)); // ?
         propMapping.put("workTitle", new PropInfo("title", true, true, true, true));
         propMapping.put("personName", new PropInfo("name", true, true, true, true));
+        try {
+            FileInputStream fis = new FileInputStream("personnames.obj");
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            personnames = (Map<String,String>) ois.readObject();
+            ois.close();
+        } catch (IOException | ClassNotFoundException e) {
+            personnames = new HashMap<>();
+        }
+    }
+
+    public static void close() {
+        try {
+            FileOutputStream fos = new FileOutputStream("personnames.obj");
+            ObjectOutputStream personnamesoos = new ObjectOutputStream(fos);
+            personnamesoos.writeObject(personnames);
+            personnamesoos.close();
+            fos.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
     
     public static void createDirIfNotExists(String dir) {
@@ -375,6 +400,7 @@ public class MigrationApp
     public static void fillResourceInNode(Model m, Resource r, String rName, ObjectNode currentNode, ObjectNode rootNode, String rootName, String type) {
         String label = getLabel(m, r);
         if (type.equals("person")) {
+            personnames.put(r.getLocalName(), label);
             addToOutput(currentNode, new PropInfo("name", true, true, true, true), label);
         }
         StmtIterator propIter = r.listProperties();
@@ -414,9 +440,22 @@ public class MigrationApp
                     }
                 } else {
                     String oid = o.getLocalName();
-                    addToOutput(currentNode, pInfo, oid);
                     if (pInfo.mappedProp.equals("hasCreator")) {
                         addAuthorMapping(rName, oid);
+                        if (personnames.containsKey(oid)) {
+                            ArrayNode authors;
+                            if (!currentNode.has("hasCreator")) {
+                                authors = om.createArrayNode();
+                                currentNode.set("hasCreator", authors);
+                            } else {
+                                authors = (ArrayNode) currentNode.get("hasCreator");
+                            }
+                            ObjectNode creator = om.createObjectNode();
+                            creator.put(oid, personnames.get(oid));
+                            authors.add(creator);
+                        }
+                    } else  {
+                        addToOutput(currentNode, pInfo, oid);                        
                     }
                 }
             } else {
@@ -664,6 +703,7 @@ public class MigrationApp
         } catch (IOException e) {
             e.printStackTrace();
         }
+        close();
         long estimatedTime = System.currentTimeMillis() - startTime;
         System.out.println("done in "+estimatedTime+" ms");
     }
